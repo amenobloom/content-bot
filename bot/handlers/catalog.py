@@ -5,12 +5,13 @@ catalog.py — «🖼 Каталог» и добавление товаров в
 Каталог отправляется ОДНИМ сообщением: весь список в тексте
 и inline-клавиатура под ним (кнопка = товар). После нажатия
 на позицию меню НЕ закрывается — то же сообщение редактируется
-на месте: обновляется счётчик корзины в тексте и на кнопках.
+на месте: обновляется счётчик корзины в тексте и на кнопке.
 
-Корзина открывается кнопкой «🧺 Корзина» на Reply-панели.
-
-Каталог загружается из data/products.json один раз при импорте
-модуля и живёт в памяти.
+Каталог ЧИТАЕТСЯ ИЗ ФАЙЛА при каждом запросе: правки цен/состава
+в data/products.json подхватываются без перезапуска бота.
+Путь берётся из PERSISTENCE_DIR? Нет: products.json — это КОНТЕНТ
+(должен быть в репозитории), поэтому путь фиксированный:
+bot/handlers/../../data/products.json.
 """
 
 import json
@@ -29,22 +30,22 @@ _PRODUCTS_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "products.json"
 )
 
-with open(_PRODUCTS_PATH, encoding="utf-8") as f:
-    PRODUCTS: list[dict] = json.load(f)
 
-# Быстрый доступ к товару по id
-_PRODUCTS_BY_ID = {p["id"]: p for p in PRODUCTS}
+def load_products() -> list[dict]:
+    """Читает каталог из JSON заново при каждом вызове — правки без перезапуска."""
+    with open(_PRODUCTS_PATH, encoding="utf-8") as f:
+        return json.load(f)
 
 
-def catalog_text(cart: list[dict]) -> str:
+def catalog_text(products: list[dict], cart: list[dict]) -> str:
     """
     Текст каталога одним сообщением + строка состояния корзины.
     cart передаётся, чтобы строка «В корзине…» всегда была актуальной.
     """
     lines = ["🖼 <b>Каталог цифрового контента</b>", ""]
-    for i, p in enumerate(PRODUCTS, 1):
+    for i, p in enumerate(products, 1):
         lines.append(f"{i}. <b>{p['name']}</b> — {p['price']} ⭐")
-        # description опционален: товара без описания выводятся без пустой строки
+        # description опционален: товары без описания выводятся без пустой строки
         desc = p.get("description", "").strip()
         if desc:
             lines.append(f"      {desc}")
@@ -63,11 +64,12 @@ def catalog_text(cart: list[dict]) -> str:
 @router.message(F.text == "🖼 Каталог")
 async def show_catalog(message: Message) -> None:
     """Каталог одним сообщением: весь список + inline-кнопки добавления."""
+    products = load_products()
     cart = get_cart(message.from_user.id)
     qty = sum(i["qty"] for i in cart)
     await message.answer(
-        catalog_text(cart),
-        reply_markup=catalog_kb(PRODUCTS, qty),
+        catalog_text(products, cart),
+        reply_markup=catalog_kb(products, qty),
     )
 
 
@@ -84,7 +86,8 @@ async def cb_add_to_cart(callback: CallbackQuery) -> None:
         await callback.answer("Не удалось распознать товар", show_alert=True)
         return
 
-    product = _PRODUCTS_BY_ID.get(product_id)
+    products = load_products()
+    product = next((p for p in products if p["id"] == product_id), None)
     if product is None:
         # Товар могли убрать из каталога, а старые кнопки остались в чате
         await callback.answer("Товар больше недоступен", show_alert=True)
@@ -95,9 +98,9 @@ async def cb_add_to_cart(callback: CallbackQuery) -> None:
     # Меню остаётся открытым: правим то же сообщение
     cart = get_cart(callback.from_user.id)
     await callback.message.edit_text(
-        catalog_text(cart),
+        catalog_text(products, cart),
         reply_markup=catalog_kb(
-            PRODUCTS,
+            products,
             sum(i["qty"] for i in cart),
         ),
     )
