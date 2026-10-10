@@ -1,0 +1,63 @@
+# ============================================================================
+# systemd-юнит для content-bot (Linux VPS)
+#
+# УСТАНОВКА:
+#   1. Скопируйте проект на VPS, например в /opt/content-bot:
+#        rsync -a content-bot/ user@vps:/opt/content-bot/
+#
+#   2. Создайте venv и зависимости (на VPS):
+#        cd /opt/content-bot
+#        python3 -m venv venv
+#        venv/bin/pip install -r requirements.txt
+#
+#   3. Создайте .env (токен, ADMIN_ID, PROXY_URL)
+#
+#   4. Скопируйте юнит и запустите:
+#        sudo cp deploy/content-bot.service /etc/systemd/system/
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable --now content-bot
+#
+#   5. Логи:
+#        journalctl -u content-bot -f
+#
+# ТРЕБОВАНИЯ К ЮНИТУ (по заданию):
+#   Restart=always + RestartSec=10 — при любом сбое systemd
+#   перезапустит бота через 10 секунд.
+#
+# Windows-инструкция НЕ входит в этот деплой (целевая платформа — VPS).
+# ============================================================================
+
+[Unit]
+Description=TEPLO content-bot (Telegram Stars)
+Documentation=https://core.telegram.org/bots/api
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Пользователь: лучше отдельный непривилегированный, например "contentbot"
+# sudo useradd -r -s /usr/sbin/nologin contentbot
+# sudo chown -R contentbot:contentbot /opt/content-bot
+User=root
+WorkingDirectory=/opt/content-bot
+
+# Запуск через venv-питон: зависимости из requirements.txt
+ExecStart=/opt/content-bot/venv/bin/python main.py
+
+# Автоперезапуск при любом завершении (кроме чистой остановки systemctl stop)
+Restart=always
+RestartSec=10
+
+# Немного укрепления: файлы .env и БД принадлежат сервису
+UMask=0077
+
+# Логи идут в journald (смотреть: journalctl -u content-bot -f)
+StandardOutput=journal
+StandardError=journal
+
+# Корректная остановка: SIGTERM, затем SIGKILL через 30 секунд
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
