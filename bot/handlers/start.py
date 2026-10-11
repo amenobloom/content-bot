@@ -19,7 +19,7 @@ router = Router()
 STARTED_AT = datetime.now()
 
 # Telegram продавца — прямая ссылка (замените, если продавец другой)
-SELLER_TG = "https://t.me/amenobloom"
+SELLER_TG = "https://t.me/linusinn"
 
 HELP_TEXT = (
     "ℹ️ <b>Как пользоваться ботом</b>\n\n"
